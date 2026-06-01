@@ -14,7 +14,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
-import japanize_matplotlib  # noqa: F401  Streamlit Cloud でも日本語フォントを自動設定
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.colors import HexColor
 from reportlab.lib.units import mm
@@ -297,8 +296,31 @@ def generate_recommendation(results: list[dict], inp: PensionInputs) -> tuple[in
 # ─────────────────────────────────────────
 # PDF生成
 # ─────────────────────────────────────────
+def _setup_jp_font():
+    """利用可能な日本語フォントを探して設定する"""
+    jp_candidates = ["Noto Sans CJK JP", "Noto Sans JP", "IPAexGothic", "IPAPGothic",
+                     "Hiragino Sans", "Hiragino Kaku Gothic Pro", "Yu Gothic", "Meiryo"]
+    available = {f.name for f in fm.fontManager.ttflist}
+    for font in jp_candidates:
+        if font in available:
+            plt.rcParams["font.family"] = font
+            return
+    # 見つからない場合はNoto Sans CJKをダウンロードして登録
+    try:
+        import urllib.request, os, tempfile
+        url = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"
+        font_path = os.path.join(tempfile.gettempdir(), "NotoSansCJKjp.otf")
+        if not os.path.exists(font_path):
+            urllib.request.urlretrieve(url, font_path)
+        fm.fontManager.addfont(font_path)
+        prop = fm.FontProperties(fname=font_path)
+        plt.rcParams["font.family"] = prop.get_name()
+    except Exception:
+        plt.rcParams["font.family"] = "DejaVu Sans"  # フォールバック
+
 def _make_bar_chart_image(all_results: list, best_age: int) -> io.BytesIO:
-    """棒グラフをPNG画像としてBytesIOで返す（japanize_matplotlibで日本語対応）"""
+    """棒グラフをPNG画像としてBytesIOで返す"""
+    _setup_jp_font()
     ages = [r["start_age"] for r in all_results]
     nets = [r["lifetime_net"] / 10000 for r in all_results]
     bar_colors = ["#ffe066" if a == best_age else "#6fb3f5" if a == 65 else "#adb5bd" for a in ages]
