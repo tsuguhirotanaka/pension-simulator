@@ -1009,14 +1009,15 @@ def build_display_df(result: dict) -> pd.DataFrame:
 COLS = ["年齢", "受給中", "基礎年金(月)", "厚生年金(月)",
         "在職カット(月)", "加給年金(月)", "給与(月)", "年間手取り"]
 
-def show_result_tab(result: dict, reference_net=None):
+def show_result_tab(result: dict, reference_pension=None):
     """結果1件分のメトリクス＋テーブルを描画する共通関数"""
     col_a, col_b, col_c = st.columns(3)
-    net = result["lifetime_net"]
+    # 年金の総受取額（給与を除く・額面ベース）
+    total_pension = (result["df"]["monthly_pension_gross"] * 12).sum()
     col_a.metric(
-        "生涯総手取り",
-        f"{net/10000:.0f}万円",
-        delta=(f"{(net - reference_net)/10000:+.0f}万円（最適比）" if reference_net is not None and net != reference_net else None),
+        "年金の総受取額（額面）",
+        f"{total_pension/10000:.0f}万円",
+        delta=(f"{(total_pension - reference_pension)/10000:+.0f}万円（最適比）" if reference_pension is not None and total_pension != reference_pension else None),
         delta_color="inverse",
     )
     col_b.metric("加給年金 受取累計", f"{result['lifetime_kakyuu']/10000:.0f}万円")
@@ -1053,7 +1054,7 @@ else:
         show_result_tab(best_result)
 
     with tab_65:
-        show_result_tab(result_65, reference_net=best_result["lifetime_net"])
+        show_result_tab(result_65, reference_pension=(result_65["df"]["monthly_pension_gross"] * 12).sum())
 
     with tab_free:
         # 最適・65歳以外のデフォルト値を決める
@@ -1071,7 +1072,7 @@ else:
             key="free_age_slider",
         )
         free_result = next(r for r in all_results if r["start_age"] == free_age)
-        show_result_tab(free_result, reference_net=best_result["lifetime_net"])
+        show_result_tab(free_result, reference_pension=(result_65["df"]["monthly_pension_gross"] * 12).sum())
 
 
 # ─────────────────────────────────────────
