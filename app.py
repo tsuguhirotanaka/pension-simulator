@@ -285,7 +285,6 @@ st.set_page_config(
     page_title="年金最適受給戦略シミュレーター",
     page_icon="💴",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
 st.markdown("""
@@ -329,102 +328,111 @@ st.markdown("""
 
 
 # ─────────────────────────────────────────
-# サイドバー：入力フォーム
+# メインエリア
 # ─────────────────────────────────────────
-with st.sidebar:
-    st.title("📝 入力情報")
+st.title("💴 年金最適受給戦略シミュレーター")
+st.caption("在職老齢年金・繰上げ・繰下げ・加給年金をすべて考慮した生涯手取り最大化ツール（2026年4月改正対応）")
 
-    with st.expander("👤 基本情報", expanded=True):
+# ─────────────────────────────────────────
+# 入力フォーム（メイン画面）
+# ─────────────────────────────────────────
+with st.expander("📝 情報を入力する", expanded=not st.session_state.get("simulated")):
+    st.markdown("#### 👤 基本情報")
+    col1, col2, col3 = st.columns(3)
+    with col1:
         current_age = st.number_input(
             "現在の年齢",
             min_value=50, max_value=74, value=60, step=1,
             help="現在の年齢を入力してください。"
         )
+    with col2:
         life_expectancy = st.number_input(
-            "想定寿命 🔍",
+            "想定寿命",
             min_value=65, max_value=100, value=85, step=1,
             help="何歳まで生きると想定するか。平均寿命：男性81歳、女性87歳。長生きリスクを考慮して多めに設定するのが一般的です。"
         )
+    with col3:
         work_end_age = st.number_input(
-            "就労終了（引退）予定年齢",
+            "引退予定年齢",
             min_value=int(current_age), max_value=80, value=70, step=1,
             help="この年齢から給与収入がゼロになると仮定します。"
         )
 
-    with st.expander("💴 年金情報（65歳時点）", expanded=True):
-        st.caption("日本年金機構の「ねんきん定期便」または「ねんきんネット」で確認できます。")
+    st.divider()
+    st.markdown("#### 💴 年金情報（65歳時点）")
+    st.caption("ねんきん定期便またはねんきんネットで確認できます。")
+    col1, col2 = st.columns(2)
+    with col1:
         kiso_monthly = st.number_input(
             "老齢基礎年金 月額（円）",
             min_value=0, max_value=70_000, value=65_000, step=1_000,
             format="%d",
             help="65歳から受け取れる国民年金（老齢基礎年金）の月額。満額は約68,000円（2024年度）。"
         )
+    with col2:
         kosei_monthly = st.number_input(
             "老齢厚生年金 月額（円）",
             min_value=0, max_value=400_000, value=120_000, step=5_000,
             format="%d",
             help="65歳から受け取れる厚生年金（老齢厚生年金）の月額。在職老齢年金の対象となります。"
         )
-        kosei_20years = st.checkbox(
-            "厚生年金加入期間が20年以上",
-            value=True,
-            help="加給年金（家族手当）の受給条件です。20年未満の場合は加給年金は支給されません。"
-        )
+    kosei_20years = st.checkbox(
+        "厚生年金加入期間が20年以上",
+        value=True,
+        help="加給年金（家族手当）の受給条件です。20年未満の場合は加給年金は支給されません。"
+    )
 
-    with st.expander("💼 就労状況（給与）", expanded=True):
-        st.markdown("**60〜64歳の期間**")
+    st.divider()
+    st.markdown("#### 💼 就労状況（給与）")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**60〜64歳**")
         salary_before65 = st.number_input(
-            "月給（標準報酬月額）（円）",
+            "月給（円）",
             min_value=0, max_value=1_500_000, value=300_000, step=10_000,
             format="%d", key="sal_b65",
             help="在職老齢年金の計算に使われます。標準報酬月額は通勤手当等を含む月給ベースです。"
         )
         bonus_before65 = st.number_input(
-            "年間賞与合計（円）",
+            "年間賞与（円）",
             min_value=0, max_value=10_000_000, value=600_000, step=100_000,
             format="%d", key="bon_b65",
             help="年間の賞与合計額。月割り（÷12）して総報酬月額相当額に加算されます。"
         )
-
-        st.markdown("**65歳以降の期間**")
+    with col2:
+        st.markdown("**65歳以降**")
         salary_after65 = st.number_input(
-            "月給（標準報酬月額）（円）",
+            "月給（円）",
             min_value=0, max_value=1_500_000, value=250_000, step=10_000,
             format="%d", key="sal_a65",
             help="65歳以降の月給。在職老齢年金（基準：65万円）の計算に使います。"
         )
         bonus_after65 = st.number_input(
-            "年間賞与合計（円）",
+            "年間賞与（円）",
             min_value=0, max_value=10_000_000, value=500_000, step=100_000,
             format="%d", key="bon_a65",
         )
 
-    with st.expander("👫 配偶者情報", expanded=True):
-        has_spouse = st.checkbox(
-            "配偶者がいる（生計維持）",
-            value=True,
-            help="加給年金（年約40万円）の受給可否に影響します。"
+    st.divider()
+    st.markdown("#### 👫 配偶者情報")
+    has_spouse = st.checkbox(
+        "配偶者がいる（生計維持）",
+        value=True,
+        help="加給年金（年約40万円）の受給可否に影響します。"
+    )
+    if has_spouse:
+        spouse_age = st.number_input(
+            "配偶者の現在年齢",
+            min_value=20, max_value=90, value=57, step=1,
+            help="配偶者が65歳になるまで加給年金が支給されます（条件を満たす場合）。"
         )
-        if has_spouse:
-            spouse_age = st.number_input(
-                "配偶者の現在年齢",
-                min_value=20, max_value=90, value=57, step=1,
-                help="配偶者が65歳になるまで加給年金が支給されます（条件を満たす場合）。"
-            )
-        else:
-            spouse_age = 0
+    else:
+        spouse_age = 0
 
     st.divider()
     run_btn = st.button("🔍 シミュレーション実行", type="primary", use_container_width=True)
     if run_btn:
         st.session_state["simulated"] = True
-
-
-# ─────────────────────────────────────────
-# メインエリア
-# ─────────────────────────────────────────
-st.title("💴 年金最適受給戦略シミュレーター")
-st.caption("在職老齢年金・繰上げ・繰下げ・加給年金をすべて考慮した生涯手取り最大化ツール（2026年4月改正対応）")
 
 if not st.session_state.get("simulated"):
     st.info("👈 左のサイドバーで情報を入力し、「シミュレーション実行」ボタンを押してください。")
