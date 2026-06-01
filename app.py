@@ -1062,6 +1062,38 @@ def show_result_tab(result: dict, reference_pension=None):
     col_d.metric("在職老齢年金カット累計", f"{result['total_zairou_cut']/10000:.0f}万円")
     st.dataframe(build_display_df(result), use_container_width=True, hide_index=True)
 
+    with st.expander("📐 控除額（税・社保概算）の計算式と内訳"):
+        st.markdown("""
+**計算式**
+```
+控除額 = （年金 ＋ 給与）の年間合計 × 実効控除率
+手取り = 年間合計 − 控除額
+```
+
+**実効控除率の目安（簡易計算）**
+
+| 年間合計収入 | 控除率 | 内訳イメージ |
+|------------|--------|-------------|
+| 〜150万円   | 12%   | 所得税・住民税ほぼゼロ、社会保険料のみ |
+| 150〜200万円 | 15%  | 所得税・住民税が少額発生 |
+| 200〜300万円 | 17%  | 所得税・住民税・社会保険料が本格化 |
+| 300〜400万円 | 20%  | 住民税10%＋所得税5〜10%＋社保5% |
+| 400〜600万円 | 22%  | 所得税10%帯、社保・住民税が大きくなる |
+| 600万円〜   | 25%  | 所得税20%帯に入り始める |
+
+> ⚠️ **注意**：これは概算です。実際の控除額は公的年金等控除・給与所得控除・各種所得控除（配偶者控除・扶養控除等）の適用により大きく異なります。
+> 正確な手取りは税理士・社会保険労務士にご相談ください。
+        """)
+        # 現在の年齢別の控除率を表示
+        df_r = result["df"]
+        sample = df_r[df_r["annual_gross"] > 0][["age", "annual_gross", "annual_net"]].copy()
+        sample["年収（万円）"] = (sample["annual_gross"] / 10000).map(lambda x: f"{x:.0f}万円")
+        sample["控除額（万円）"] = ((sample["annual_gross"] - sample["annual_net"]) / 10000).map(lambda x: f"▼{x:.1f}万円")
+        sample["実効控除率"] = ((1 - sample["annual_net"] / sample["annual_gross"]) * 100).map(lambda x: f"{x:.0f}%")
+        sample["年齢"] = sample["age"].astype(str) + "歳"
+        st.caption("▼ このシミュレーションで適用された控除率（年齢別）")
+        st.dataframe(sample[["年齢", "年収（万円）", "控除額（万円）", "実効控除率"]].set_index("年齢"), use_container_width=True)
+
 
 # ── ラベル定義 ──
 label_best = f"🏆 最適：{best_age}歳開始（{best_result['adjustment_rate']*100:+.1f}%）"
