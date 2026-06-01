@@ -8,6 +8,21 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from dataclasses import dataclass
+import io
+import datetime
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.units import mm
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+)
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
 # ─────────────────────────────────────────
 # 定数
@@ -276,6 +291,242 @@ def generate_recommendation(results: list[dict], inp: PensionInputs) -> tuple[in
         )
 
     return best_age, best_net, diff_vs_65, "\n\n".join(lines)
+
+
+# ─────────────────────────────────────────
+# PDF生成
+# ─────────────────────────────────────────
+def _make_bar_chart_image(all_results: list, best_age: int) -> io.BytesIO:
+    """棒グラフをPNG画像としてBytesIOで返す（matplotlib使用）"""
+    # 日本語フォント設定
+    jp_fonts = [f.name for f in fm.fontManager.ttflist if "Hiragino" in f.name or "Noto" in f.name or "IPAex" in f.name]
+    if jp_fonts:
+        plt.rcParams["font.family"] = jp_fonts[0]
+    else:
+        plt.rcParams["font.family"] = "DejaVu Sans"
+
+    ages = [r["start_age"] for r in all_results]
+    nets = [r["lifetime_net"] / 10000 for r in all_results]
+    bar_colors = ["#ffe066" if a == best_age else "#6fb3f5" if a == 65 else "#adb5bd" for a in ages]
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    bars = ax.bar([f"{a}歳" for a in ages], nets, color=bar_colors, edgecolor="white", linewidth=0.5)
+
+    # 最適バーにラベル
+    for bar, age, net in zip(bars, ages, nets):
+        if age == best_age:
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 5,
+                    "最適", ha="center", va="bottom", fontsize=9, fontweight="bold", color="#1a3a5c")
+
+    ax.set_ylabel("生涯総手取り額（万円）")
+    ax.set_title("受給開始年齢別 生涯総手取り額")
+    ax.set_ylim(min(nets) * 0.95, max(nets) * 1.08)
+    ax.yaxis.grid(True, alpha=0.3)
+    ax.set_axisbelow(True)
+    ax.spines[["top", "right"]].set_visible(False)
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def generate_pdf(
+    inp: PensionInputs,
+    all_results: list,
+    best_age: int,
+    best_net: float,
+    diff_vs_65: float,
+    reason_text: str,
+) -> bytes:
+    """PDFレポートを生成してbytesで返す"""
+    # 日本語フォント登録
+    pdfmetrics.registerFont(UnicodeCIDFont("HeiseiKakuGo-W5"))
+    FONT = "HeiseiKakuGo-W5"
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=20*mm, rightMargin=20*mm,
+        topMargin=18*mm, bottomMargin=18*mm,
+    )
+
+    # スタイル定義
+    def style(name, size=10, bold=False, color=colors.black, align="LEFT", leading=None):
+        return ParagraphStyle(
+            name,
+            fontName=FONT,
+            fontSize=size,
+            textColor=color,
+            alignment={"LEFT": 0, "CENTER": 1, "RIGHT": 2}[align],
+            leading=leading or size * 1.5,
+            spaceAfter=2,
+        )
+
+    s_title  = style("title",  18, bold=True, color=colors.HexColor("#1a3a5c"), align="CENTER")
+    s_sub    = style("sub",    9,  color=colors.grey, align="CENTER")
+    s_h1     = style("h1",    13, bold=True, color=colors.HexColor("#1a3a5c"))
+    s_h2     = style("h2",    11, bold=True, color=colors.HexColor("#0d6efd"))
+    s_body   = style("body",   9)
+    s_best   = style("best",  14, bold=True, color=colors.HexColor("#1a3a5c"), align="CENTER")
+    s_small  = style("small",  8, color=colors.grey)
+
+    def hr():
+        return Table([[""]], colWidths=[170*mm],
+                     style=TableStyle([("LINEBELOW", (0,0), (-1,-1), 0.5, colors.HexColor("#dee2e6"))]))
+
+    story = []
+
+    # ── ヘッダー ──
+    story.append(Paragraph("年金最適受給戦略レポート", s_title))
+    story.append(Paragraph(
+        f"生成日：{datetime.date.today().strftime('%Y年%m月%d日')}　／　"
+        f"想定寿命：{inp.life_expectancy}歳　／　2026年4月改正対応版", s_sub))
+    story.append(Spacer(1, 4*mm))
+    story.append(hr())
+    story.append(Spacer(1, 3*mm))
+
+    # ── 入力情報 ──
+    story.append(Paragraph("■ 入力情報", s_h1))
+    story.append(Spacer(1, 2*mm))
+    info_data = [
+        ["項目", "値", "項目", "値"],
+        ["現在の年齢", f"{inp.current_age}歳", "引退予定年齢", f"{inp.work_end_age}歳"],
+        ["想定寿命", f"{inp.life_expectancy}歳", "厚生年金加入20年以上", "はい" if inp.kosei_20years else "いいえ"],
+        ["老齢基礎年金（月額）", f"{inp.kiso_monthly:,}円", "老齢厚生年金（月額）", f"{inp.kosei_monthly:,}円"],
+        ["月給（65歳前）", f"{inp.salary_before65:,}円", "月給（65歳以降）", f"{inp.salary_after65:,}円"],
+        ["年間賞与（65歳前）", f"{inp.bonus_before65:,}円", "年間賞与（65歳以降）", f"{inp.bonus_after65:,}円"],
+        ["配偶者", "あり" if inp.has_spouse else "なし",
+         "配偶者の年齢", f"{inp.spouse_age}歳" if inp.has_spouse else "−"],
+    ]
+    t = Table(info_data, colWidths=[42*mm, 40*mm, 42*mm, 40*mm])
+    t.setStyle(TableStyle([
+        ("FONTNAME",     (0,0), (-1,-1), FONT),
+        ("FONTSIZE",     (0,0), (-1,-1), 8.5),
+        ("BACKGROUND",   (0,0), (-1,0),  colors.HexColor("#1a3a5c")),
+        ("TEXTCOLOR",    (0,0), (-1,0),  colors.white),
+        ("BACKGROUND",   (0,1), (-1,-1), colors.HexColor("#f8f9fa")),
+        ("ROWBACKGROUNDS",(0,1),(-1,-1), [colors.white, colors.HexColor("#f0f4ff")]),
+        ("GRID",         (0,0), (-1,-1), 0.3, colors.HexColor("#dee2e6")),
+        ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING",   (0,0), (-1,-1), 3),
+        ("BOTTOMPADDING",(0,0), (-1,-1), 3),
+    ]))
+    story.append(t)
+    story.append(Spacer(1, 5*mm))
+
+    # ── 最適受給戦略 ──
+    story.append(hr())
+    story.append(Spacer(1, 3*mm))
+    story.append(Paragraph("■ 最適受給戦略の提案", s_h1))
+    story.append(Spacer(1, 2*mm))
+
+    adj = next(r["adjustment_rate"] for r in all_results if r["start_age"] == best_age)
+    adj_str = f"+{adj*100:.1f}%" if adj >= 0 else f"{adj*100:.1f}%"
+    sign = "+" if diff_vs_65 > 0 else ""
+
+    best_data = [
+        [Paragraph("最適受給開始年齢", s_body),
+         Paragraph(f"{best_age}歳", s_best),
+         Paragraph("年金増減率", s_body),
+         Paragraph(adj_str, s_best)],
+        [Paragraph("生涯総手取り（推計）", s_body),
+         Paragraph(f"約{best_net/10000:.0f}万円", s_best),
+         Paragraph("65歳受給との差", s_body),
+         Paragraph(f"{sign}{diff_vs_65/10000:.0f}万円", s_best)],
+    ]
+    bt = Table(best_data, colWidths=[42*mm, 43*mm, 42*mm, 37*mm])
+    bt.setStyle(TableStyle([
+        ("FONTNAME",     (0,0), (-1,-1), FONT),
+        ("BACKGROUND",   (0,0), (-1,-1), colors.HexColor("#eef4ff")),
+        ("BOX",          (0,0), (-1,-1), 1.5, colors.HexColor("#0d6efd")),
+        ("INNERGRID",    (0,0), (-1,-1), 0.3, colors.HexColor("#c5d8f5")),
+        ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING",   (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING",(0,0), (-1,-1), 5),
+    ]))
+    story.append(bt)
+    story.append(Spacer(1, 3*mm))
+
+    # 推奨理由（マークダウン記号を除去）
+    clean_reason = reason_text.replace("**", "").replace("⚠️", "※").replace("📊", "").replace("\n\n", "\n")
+    for line in clean_reason.split("\n"):
+        if line.strip():
+            story.append(Paragraph(line.strip(), s_body))
+    story.append(Spacer(1, 5*mm))
+
+    # ── 棒グラフ ──
+    story.append(hr())
+    story.append(Spacer(1, 3*mm))
+    story.append(Paragraph("■ 受給開始年齢別 生涯総手取り額", s_h1))
+    story.append(Spacer(1, 2*mm))
+    chart_buf = _make_bar_chart_image(all_results, best_age)
+    story.append(RLImage(chart_buf, width=165*mm, height=66*mm))
+    story.append(Spacer(1, 5*mm))
+
+    # ── 詳細比較テーブル ──
+    story.append(hr())
+    story.append(Spacer(1, 3*mm))
+    story.append(Paragraph("■ 全受給パターン詳細比較", s_h1))
+    story.append(Spacer(1, 2*mm))
+
+    r65_net = next(r["lifetime_net"] for r in all_results if r["start_age"] == 65)
+    tbl_header = ["受給開始", "増減率", "月額年金(平均)", "在職カット累計", "加給年金累計", "生涯総手取り", "65歳比"]
+    tbl_data = [tbl_header]
+    for r in all_results:
+        sa = r["start_age"]
+        recv_df = r["df"][r["df"]["receiving"]]
+        avg_m = recv_df["monthly_pension_gross"].mean() if len(recv_df) > 0 else 0
+        adj2 = r["adjustment_rate"] * 100
+        adj2_str = f"+{adj2:.1f}%" if adj2 > 0 else (f"{adj2:.1f}%" if adj2 < 0 else "±0%")
+        diff2 = r["lifetime_net"] - r65_net
+        diff2_str = f"+{diff2/10000:.0f}万" if diff2 > 0 else f"{diff2/10000:.0f}万"
+        mark = "★最適" if sa == best_age else ("基準" if sa == 65 else "")
+        tbl_data.append([
+            f"{sa}歳 {mark}",
+            adj2_str,
+            f"{avg_m:,.0f}円",
+            f"{r['total_zairou_cut']/10000:.0f}万円" if r["total_zairou_cut"] > 0 else "−",
+            f"{r['lifetime_kakyuu']/10000:.0f}万円" if r["lifetime_kakyuu"] > 0 else "−",
+            f"{r['lifetime_net']/10000:.0f}万円",
+            diff2_str,
+        ])
+
+    col_w = [24*mm, 18*mm, 26*mm, 24*mm, 22*mm, 26*mm, 18*mm]
+    dt = Table(tbl_data, colWidths=col_w, repeatRows=1)
+    dt.setStyle(TableStyle([
+        ("FONTNAME",      (0,0), (-1,-1), FONT),
+        ("FONTSIZE",      (0,0), (-1,-1), 7.5),
+        ("BACKGROUND",    (0,0), (-1,0),  colors.HexColor("#1a3a5c")),
+        ("TEXTCOLOR",     (0,0), (-1,0),  colors.white),
+        ("ROWBACKGROUNDS",(0,1),(-1,-1),  [colors.white, colors.HexColor("#f0f4ff")]),
+        ("GRID",          (0,0), (-1,-1), 0.3, colors.HexColor("#dee2e6")),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING",    (0,0), (-1,-1), 3),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+        ("ALIGN",         (1,1), (-1,-1), "RIGHT"),
+    ]))
+    # 最適行・65歳行を強調
+    for i, r in enumerate(all_results, start=1):
+        if r["start_age"] == best_age:
+            dt.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), colors.HexColor("#fff3b0"))]))
+        elif r["start_age"] == 65:
+            dt.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), colors.HexColor("#dbeafe"))]))
+    story.append(dt)
+    story.append(Spacer(1, 5*mm))
+
+    # ── フッター ──
+    story.append(hr())
+    story.append(Spacer(1, 2*mm))
+    story.append(Paragraph(
+        "※ 本レポートは概算値です。実際の年金額・税額は個人の状況により異なります。"
+        "正確な試算は日本年金機構またはお近くの社会保険労務士にご相談ください。"
+        "　在職老齢年金基準：2026年4月改正後（月65万円）　加給年金：2024年度額（年397,500円）", s_small))
+
+    doc.build(story)
+    return buf.getvalue()
 
 
 # ─────────────────────────────────────────
@@ -673,6 +924,30 @@ def highlight_best(row):
 
 styled = df_table.style.apply(highlight_best, axis=1)
 st.dataframe(styled, use_container_width=True, hide_index=True)
+
+st.divider()
+
+# ═══════════════════════════════════════
+# PDFレポート出力
+# ═══════════════════════════════════════
+st.markdown("## 📄 PDFレポートをダウンロード")
+st.caption("入力情報・最適提案・比較グラフ・詳細テーブルをまとめたレポートを出力します。")
+
+if st.button("📥 PDFを生成する", type="secondary"):
+    with st.spinner("PDFを生成中..."):
+        try:
+            pdf_bytes = generate_pdf(inp, all_results, best_age, best_net, diff_vs_65, reason_text)
+            filename = f"年金受給戦略レポート_{datetime.date.today().strftime('%Y%m%d')}.pdf"
+            st.download_button(
+                label="⬇️ PDFをダウンロード",
+                data=pdf_bytes,
+                file_name=filename,
+                mime="application/pdf",
+                type="primary",
+            )
+            st.success("PDF生成完了！上のボタンからダウンロードしてください。")
+        except Exception as e:
+            st.error(f"PDF生成中にエラーが発生しました: {e}")
 
 st.divider()
 
