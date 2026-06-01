@@ -15,7 +15,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
+from reportlab.lib.colors import HexColor
 from reportlab.lib.units import mm
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
@@ -354,17 +354,17 @@ def generate_pdf(
     )
 
     # よく使う色を変数で定義（colors.xxx は環境依存があるため HexColor に統一）
-    C_BLACK  = colors.HexColor("#000000")
-    C_WHITE  = colors.HexColor("#ffffff")
-    C_GREY   = colors.HexColor("#6c757d")
-    C_NAVY   = colors.HexColor("#1a3a5c")
-    C_BLUE   = colors.HexColor("#0d6efd")
-    C_HEAD   = colors.HexColor("#1a3a5c")
-    C_LINE   = colors.HexColor("#dee2e6")
-    C_ROW0   = colors.HexColor("#ffffff")
-    C_ROW1   = colors.HexColor("#f0f4ff")
-    C_BEST   = colors.HexColor("#fff3b0")
-    C_65     = colors.HexColor("#dbeafe")
+    C_BLACK  = HexColor("#000000")
+    C_WHITE  = HexColor("#ffffff")
+    C_GREY   = HexColor("#6c757d")
+    C_NAVY   = HexColor("#1a3a5c")
+    C_BLUE   = HexColor("#0d6efd")
+    C_HEAD   = HexColor("#1a3a5c")
+    C_LINE   = HexColor("#dee2e6")
+    C_ROW0   = HexColor("#ffffff")
+    C_ROW1   = HexColor("#f0f4ff")
+    C_BEST   = HexColor("#fff3b0")
+    C_65     = HexColor("#dbeafe")
 
     # スタイル定義
     def style(name, size=10, color=None, align="LEFT", leading=None):
@@ -453,9 +453,9 @@ def generate_pdf(
     bt = Table(best_data, colWidths=[42*mm, 43*mm, 42*mm, 37*mm])
     bt.setStyle(TableStyle([
         ("FONTNAME",     (0,0), (-1,-1), FONT),
-        ("BACKGROUND",   (0,0), (-1,-1), colors.HexColor("#eef4ff")),
+        ("BACKGROUND",   (0,0), (-1,-1), HexColor("#eef4ff")),
         ("BOX",          (0,0), (-1,-1), 1.5, C_BLUE),
-        ("INNERGRID",    (0,0), (-1,-1), 0.3, colors.HexColor("#c5d8f5")),
+        ("INNERGRID",    (0,0), (-1,-1), 0.3, HexColor("#c5d8f5")),
         ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
         ("TOPPADDING",   (0,0), (-1,-1), 5),
         ("BOTTOMPADDING",(0,0), (-1,-1), 5),
