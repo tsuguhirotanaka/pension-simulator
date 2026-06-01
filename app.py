@@ -719,7 +719,6 @@ with st.expander("📝 情報を入力する", expanded=not st.session_state.get
         st.session_state["simulated"] = True
 
 if not st.session_state.get("simulated"):
-    st.info("👈 左のサイドバーで情報を入力し、「シミュレーション実行」ボタンを押してください。")
 
     # 用語説明
     with st.expander("📖 主な用語の説明"):
