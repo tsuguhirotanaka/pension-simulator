@@ -992,7 +992,7 @@ best_result = next(r for r in all_results if r["start_age"] == best_age)
 result_65 = next(r for r in all_results if r["start_age"] == 65)
 
 
-def build_display_df(result: dict) -> pd.DataFrame:
+def build_display_df(result: dict, inp=inp) -> pd.DataFrame:
     df = result["df"].copy()
     df["年齢"] = df["age"].astype(str) + "歳"
     df["受給中"] = df["receiving"].map({True: "✅", False: "待機中"})
@@ -1000,14 +1000,17 @@ def build_display_df(result: dict) -> pd.DataFrame:
     df["厚生年金(月)"] = df["monthly_kosei"].map(lambda x: f"{x:,.0f}円" if x > 0 else "−")
     df["在職カット(月)"] = df["zairou_cut"].map(lambda x: f"▼{x:,.0f}円" if x > 0 else "−")
     df["加給年金(月)"] = df["monthly_kakyuu"].map(lambda x: f"{x:,.0f}円" if x > 0 else "−")
-    df["給与(月)"] = df["monthly_salary"].map(lambda x: f"{x:,.0f}円" if x > 0 else "−")
+    df["給与(年)"] = df.apply(
+        lambda row: f"{(row['monthly_salary']*12 + (inp.bonus_before65 if row['age'] < 65 else inp.bonus_after65))/10000:.0f}万円"
+        if row["monthly_salary"] > 0 else "−", axis=1
+    )
     df["年金受取（年・額面）"] = (df["monthly_pension_gross"] * 12).map(lambda x: f"{x/10000:.1f}万円" if x > 0 else "−")
     df["控除額（税・社保概算）"] = (df["annual_gross"] - df["annual_net"]).map(
         lambda x: f"▼{x/10000:.1f}万円" if x > 0 else "−"
     )
     df["年間手取り（年金＋給与）"] = df["annual_net"].map(lambda x: f"{x/10000:.0f}万円")
     return df[["年齢", "受給中", "基礎年金(月)", "厚生年金(月)",
-               "在職カット(月)", "加給年金(月)", "給与(月)",
+               "在職カット(月)", "加給年金(月)", "給与(年)",
                "年金受取（年・額面）", "控除額（税・社保概算）", "年間手取り（年金＋給与）"]]
 
 
