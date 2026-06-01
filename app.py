@@ -297,33 +297,32 @@ def generate_recommendation(results: list[dict], inp: PensionInputs) -> tuple[in
 # PDF生成
 # ─────────────────────────────────────────
 def _make_bar_chart_image(all_results: list, best_age: int) -> io.BytesIO:
-    """棒グラフをPNG画像としてBytesIOで返す（matplotlib使用）"""
-    # 日本語フォント設定
-    jp_fonts = [f.name for f in fm.fontManager.ttflist if "Hiragino" in f.name or "Noto" in f.name or "IPAex" in f.name]
-    if jp_fonts:
-        plt.rcParams["font.family"] = jp_fonts[0]
-    else:
-        plt.rcParams["font.family"] = "DejaVu Sans"
+    """棒グラフをPNG画像としてBytesIOで返す（日本語フォント不要・英語ラベル）"""
+    plt.rcParams["font.family"] = "DejaVu Sans"
 
     ages = [r["start_age"] for r in all_results]
     nets = [r["lifetime_net"] / 10000 for r in all_results]
     bar_colors = ["#ffe066" if a == best_age else "#6fb3f5" if a == 65 else "#adb5bd" for a in ages]
 
     fig, ax = plt.subplots(figsize=(10, 4))
-    bars = ax.bar([f"{a}歳" for a in ages], nets, color=bar_colors, edgecolor="white", linewidth=0.5)
+    bars = ax.bar([f"Age {a}" for a in ages], nets, color=bar_colors, edgecolor="white", linewidth=0.5)
 
-    # 最適バーにラベル
-    for bar, age, net in zip(bars, ages, nets):
+    # 最適バーにラベル（英語）
+    for bar, age in zip(bars, ages):
         if age == best_age:
             ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 5,
-                    "最適", ha="center", va="bottom", fontsize=9, fontweight="bold", color="#1a3a5c")
+                    "BEST", ha="center", va="bottom", fontsize=9, fontweight="bold", color="#1a3a5c")
+        elif age == 65:
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 5,
+                    "Std", ha="center", va="bottom", fontsize=8, color="#0d6efd")
 
-    ax.set_ylabel("生涯総手取り額（万円）")
-    ax.set_title("受給開始年齢別 生涯総手取り額")
-    ax.set_ylim(min(nets) * 0.95, max(nets) * 1.08)
+    ax.set_ylabel("Lifetime Net Income (10,000 JPY)")
+    ax.set_title(f"Lifetime Net Income by Pension Start Age  [BEST={best_age}, Std=65]")
+    ax.set_ylim(min(nets) * 0.95, max(nets) * 1.10)
     ax.yaxis.grid(True, alpha=0.3)
     ax.set_axisbelow(True)
     ax.spines[["top", "right"]].set_visible(False)
+    plt.xticks(rotation=45, fontsize=8)
     plt.tight_layout()
 
     buf = io.BytesIO()
