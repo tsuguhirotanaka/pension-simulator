@@ -353,29 +353,41 @@ def generate_pdf(
         topMargin=18*mm, bottomMargin=18*mm,
     )
 
+    # よく使う色を変数で定義（colors.xxx は環境依存があるため HexColor に統一）
+    C_BLACK  = colors.HexColor("#000000")
+    C_WHITE  = colors.HexColor("#ffffff")
+    C_GREY   = colors.HexColor("#6c757d")
+    C_NAVY   = colors.HexColor("#1a3a5c")
+    C_BLUE   = colors.HexColor("#0d6efd")
+    C_HEAD   = colors.HexColor("#1a3a5c")
+    C_LINE   = colors.HexColor("#dee2e6")
+    C_ROW0   = colors.HexColor("#ffffff")
+    C_ROW1   = colors.HexColor("#f0f4ff")
+    C_BEST   = colors.HexColor("#fff3b0")
+    C_65     = colors.HexColor("#dbeafe")
+
     # スタイル定義
-    def style(name, size=10, bold=False, color=colors.black, align="LEFT", leading=None):
+    def style(name, size=10, color=None, align="LEFT", leading=None):
         return ParagraphStyle(
             name,
             fontName=FONT,
             fontSize=size,
-            textColor=color,
+            textColor=color or C_BLACK,
             alignment={"LEFT": 0, "CENTER": 1, "RIGHT": 2}[align],
             leading=leading or size * 1.5,
             spaceAfter=2,
         )
 
-    s_title  = style("title",  18, bold=True, color=colors.HexColor("#1a3a5c"), align="CENTER")
-    s_sub    = style("sub",    9,  color=colors.grey, align="CENTER")
-    s_h1     = style("h1",    13, bold=True, color=colors.HexColor("#1a3a5c"))
-    s_h2     = style("h2",    11, bold=True, color=colors.HexColor("#0d6efd"))
-    s_body   = style("body",   9)
-    s_best   = style("best",  14, bold=True, color=colors.HexColor("#1a3a5c"), align="CENTER")
-    s_small  = style("small",  8, color=colors.grey)
+    s_title  = style("title",  18, color=C_NAVY,  align="CENTER")
+    s_sub    = style("sub",     9, color=C_GREY,  align="CENTER")
+    s_h1     = style("h1",     13, color=C_NAVY)
+    s_body   = style("body",    9)
+    s_best   = style("best",   14, color=C_NAVY,  align="CENTER")
+    s_small  = style("small",   8, color=C_GREY)
 
     def hr():
         return Table([[""]], colWidths=[170*mm],
-                     style=TableStyle([("LINEBELOW", (0,0), (-1,-1), 0.5, colors.HexColor("#dee2e6"))]))
+                     style=TableStyle([("LINEBELOW", (0,0), (-1,-1), 0.5, C_LINE)]))
 
     story = []
 
@@ -402,18 +414,19 @@ def generate_pdf(
          "配偶者の年齢", f"{inp.spouse_age}歳" if inp.has_spouse else "−"],
     ]
     t = Table(info_data, colWidths=[42*mm, 40*mm, 42*mm, 40*mm])
-    t.setStyle(TableStyle([
+    info_style = [
         ("FONTNAME",     (0,0), (-1,-1), FONT),
         ("FONTSIZE",     (0,0), (-1,-1), 8.5),
-        ("BACKGROUND",   (0,0), (-1,0),  colors.HexColor("#1a3a5c")),
-        ("TEXTCOLOR",    (0,0), (-1,0),  colors.white),
-        ("BACKGROUND",   (0,1), (-1,-1), colors.HexColor("#f8f9fa")),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1), [colors.white, colors.HexColor("#f0f4ff")]),
-        ("GRID",         (0,0), (-1,-1), 0.3, colors.HexColor("#dee2e6")),
+        ("BACKGROUND",   (0,0), (-1,0),  C_HEAD),
+        ("TEXTCOLOR",    (0,0), (-1,0),  C_WHITE),
+        ("GRID",         (0,0), (-1,-1), 0.3, C_LINE),
         ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
         ("TOPPADDING",   (0,0), (-1,-1), 3),
         ("BOTTOMPADDING",(0,0), (-1,-1), 3),
-    ]))
+    ]
+    for i in range(1, len(info_data)):
+        info_style.append(("BACKGROUND", (0,i), (-1,i), C_ROW0 if i % 2 == 1 else C_ROW1))
+    t.setStyle(TableStyle(info_style))
     story.append(t)
     story.append(Spacer(1, 5*mm))
 
@@ -441,7 +454,7 @@ def generate_pdf(
     bt.setStyle(TableStyle([
         ("FONTNAME",     (0,0), (-1,-1), FONT),
         ("BACKGROUND",   (0,0), (-1,-1), colors.HexColor("#eef4ff")),
-        ("BOX",          (0,0), (-1,-1), 1.5, colors.HexColor("#0d6efd")),
+        ("BOX",          (0,0), (-1,-1), 1.5, C_BLUE),
         ("INNERGRID",    (0,0), (-1,-1), 0.3, colors.HexColor("#c5d8f5")),
         ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
         ("TOPPADDING",   (0,0), (-1,-1), 5),
@@ -496,24 +509,25 @@ def generate_pdf(
 
     col_w = [24*mm, 18*mm, 26*mm, 24*mm, 22*mm, 26*mm, 18*mm]
     dt = Table(tbl_data, colWidths=col_w, repeatRows=1)
-    dt.setStyle(TableStyle([
-        ("FONTNAME",      (0,0), (-1,-1), FONT),
-        ("FONTSIZE",      (0,0), (-1,-1), 7.5),
-        ("BACKGROUND",    (0,0), (-1,0),  colors.HexColor("#1a3a5c")),
-        ("TEXTCOLOR",     (0,0), (-1,0),  colors.white),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1),  [colors.white, colors.HexColor("#f0f4ff")]),
-        ("GRID",          (0,0), (-1,-1), 0.3, colors.HexColor("#dee2e6")),
-        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
-        ("TOPPADDING",    (0,0), (-1,-1), 3),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 3),
-        ("ALIGN",         (1,1), (-1,-1), "RIGHT"),
-    ]))
-    # 最適行・65歳行を強調
+    dt_style = [
+        ("FONTNAME",     (0,0), (-1,-1), FONT),
+        ("FONTSIZE",     (0,0), (-1,-1), 7.5),
+        ("BACKGROUND",   (0,0), (-1,0),  C_HEAD),
+        ("TEXTCOLOR",    (0,0), (-1,0),  C_WHITE),
+        ("GRID",         (0,0), (-1,-1), 0.3, C_LINE),
+        ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING",   (0,0), (-1,-1), 3),
+        ("BOTTOMPADDING",(0,0), (-1,-1), 3),
+        ("ALIGN",        (1,1), (-1,-1), "RIGHT"),
+    ]
     for i, r in enumerate(all_results, start=1):
         if r["start_age"] == best_age:
-            dt.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), colors.HexColor("#fff3b0"))]))
+            dt_style.append(("BACKGROUND", (0,i), (-1,i), C_BEST))
         elif r["start_age"] == 65:
-            dt.setStyle(TableStyle([("BACKGROUND", (0,i), (-1,i), colors.HexColor("#dbeafe"))]))
+            dt_style.append(("BACKGROUND", (0,i), (-1,i), C_65))
+        else:
+            dt_style.append(("BACKGROUND", (0,i), (-1,i), C_ROW0 if i % 2 == 1 else C_ROW1))
+    dt.setStyle(TableStyle(dt_style))
     story.append(dt)
     story.append(Spacer(1, 5*mm))
 
