@@ -1001,10 +1001,14 @@ def build_display_df(result: dict) -> pd.DataFrame:
     df["在職カット(月)"] = df["zairou_cut"].map(lambda x: f"▼{x:,.0f}円" if x > 0 else "−")
     df["加給年金(月)"] = df["monthly_kakyuu"].map(lambda x: f"{x:,.0f}円" if x > 0 else "−")
     df["給与(月)"] = df["monthly_salary"].map(lambda x: f"{x:,.0f}円" if x > 0 else "−")
-    df["年金受取（年）"] = (df["monthly_pension_gross"] * 12).map(lambda x: f"{x/10000:.1f}万円" if x > 0 else "−")
+    df["年金受取（年・額面）"] = (df["monthly_pension_gross"] * 12).map(lambda x: f"{x/10000:.1f}万円" if x > 0 else "−")
+    df["控除額（税・社保概算）"] = (df["annual_gross"] - df["annual_net"]).map(
+        lambda x: f"▼{x/10000:.1f}万円" if x > 0 else "−"
+    )
     df["年間手取り（年金＋給与）"] = df["annual_net"].map(lambda x: f"{x/10000:.0f}万円")
     return df[["年齢", "受給中", "基礎年金(月)", "厚生年金(月)",
-               "在職カット(月)", "加給年金(月)", "給与(月)", "年金受取（年）", "年間手取り（年金＋給与）"]]
+               "在職カット(月)", "加給年金(月)", "給与(月)",
+               "年金受取（年・額面）", "控除額（税・社保概算）", "年間手取り（年金＋給与）"]]
 
 
 COLS = ["年齢", "受給中", "基礎年金(月)", "厚生年金(月)",
