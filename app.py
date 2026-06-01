@@ -738,6 +738,20 @@ with st.spinner("計算中..."):
 # ── 推奨生成 ──
 best_age, best_net, diff_vs_65, reason_text = generate_recommendation(all_results, inp)
 
+# 最適の月々年金手取り額を算出（受給開始後の最初の年の月額）
+def get_monthly_pension(result):
+    recv = result["df"][result["df"]["receiving"]]
+    if len(recv) == 0:
+        return 0
+    row = recv.iloc[0]
+    monthly_gross = row["monthly_pension_gross"]
+    annual_gross = row["annual_gross"]
+    return monthly_gross * (1 - net_rate(annual_gross))
+
+best_monthly = get_monthly_pension(next(r for r in all_results if r["start_age"] == best_age))
+monthly_65   = get_monthly_pension(next(r for r in all_results if r["start_age"] == 65))
+monthly_diff = best_monthly - monthly_65
+
 
 # ═══════════════════════════════════════
 # [1] 最適受給戦略の提案
@@ -746,14 +760,19 @@ st.markdown("## 💡 最適受給戦略の提案")
 
 adj_rate = next(r["adjustment_rate"] for r in all_results if r["start_age"] == best_age)
 adj_str = f"+{adj_rate*100:.1f}%" if adj_rate >= 0 else f"{adj_rate*100:.1f}%"
+diff_sign = "+" if monthly_diff >= 0 else ""
 
 st.markdown(f"""
 <div class="best-box">
-  <h2>🏆 最も生涯手取りが大きくなる受給開始年齢</h2>
+  <h2>🏆 最もお得な受給開始年齢</h2>
   <div class="age-badge">{best_age}歳</div>
-  <div style="font-size:1.05rem; line-height:1.8;">
+  <div style="font-size:1.1rem; line-height:2.2;">
+    月々の年金手取り：<strong style="font-size:1.5rem;">約{best_monthly/10000:.1f}万円</strong>／月
+    　<span style="font-size:0.95rem; opacity:0.85;">（65歳比：{diff_sign}{monthly_diff/10000:.1f}万円／月）</span>
+  </div>
+  <div style="font-size:0.95rem; line-height:1.8; opacity:0.9;">
     年金増減率：<strong>{adj_str}</strong>　／
-    想定生涯総手取り（年金＋給与）：<strong>約{best_net/10000:.0f}万円</strong>
+    65歳より受け取り総額：<strong>{'+' if diff_vs_65>=0 else ''}{diff_vs_65/10000:.0f}万円</strong>多い
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -779,43 +798,42 @@ st.divider()
 
 
 # ═══════════════════════════════════════
-# [2] 生涯総手取り比較グラフ
+# [2] 月々の年金手取り比較グラフ
 # ═══════════════════════════════════════
-st.markdown("## 📊 受給開始年齢別 生涯総手取り額の比較")
+st.markdown("## 📊 受給開始年齢別 月々の年金手取り額")
 
 ages_plot = [r["start_age"] for r in all_results]
-nets_plot = [r["lifetime_net"] / 10000 for r in all_results]  # 万円
+monthly_plot = [get_monthly_pension(r) / 10000 for r in all_results]  # 万円/月
 
-colors = []
+bar_colors = []
 for r in all_results:
     if r["start_age"] == best_age:
-        colors.append("#ffe066")
+        bar_colors.append("#ffe066")
     elif r["start_age"] == 65:
-        colors.append("#6fb3f5")
+        bar_colors.append("#6fb3f5")
     else:
-        colors.append("#adb5bd")
+        bar_colors.append("#adb5bd")
 
-y_max = max(nets_plot)
-y_min = min(nets_plot)
-y_range_top = y_max + (y_max - y_min) * 0.22  # 🏆ラベルと数値が被らないよう余白を確保
+y_max = max(monthly_plot)
+y_min = min(monthly_plot)
+y_range_top = y_max + (y_max - y_min) * 0.25
 
 fig_bar = go.Figure(go.Bar(
     x=[f"{a}歳" for a in ages_plot],
-    y=nets_plot,
-    marker_color=colors,
-    text=[f"{v:,.0f}万" for v in nets_plot],
-    textposition="inside",   # 数値をバー内部に表示して被りを防ぐ
-    textfont=dict(size=11, color="white"),
-    hovertemplate="<b>%{x}</b><br>生涯総手取り: %{y:,.0f}万円<extra></extra>",
+    y=monthly_plot,
+    marker_color=bar_colors,
+    text=[f"{v:.1f}万円" for v in monthly_plot],
+    textposition="inside",
+    textfont=dict(size=10, color="white"),
+    hovertemplate="<b>%{x}から受給</b><br>月々の年金手取り: %{y:.1f}万円<extra></extra>",
 ))
 
-# 最適バーの上に矢印付きで「🏆 最適」を表示（バー数値と重ならない位置）
-best_y = next(r["lifetime_net"] / 10000 for r in all_results if r["start_age"] == best_age)
+best_y_m = get_monthly_pension(next(r for r in all_results if r["start_age"] == best_age)) / 10000
 fig_bar.update_layout(
-    title=f"受給開始年齢ごとの生涯総手取り額（想定寿命{inp.life_expectancy}歳）",
+    title="受給開始年齢ごとの月々の年金手取り額（受給開始直後）",
     xaxis_title="受給開始年齢",
-    yaxis_title="生涯総手取り額（万円）",
-    yaxis=dict(range=[y_min * 0.97, y_range_top], gridcolor="#e9ecef"),
+    yaxis_title="月々の年金手取り額（万円／月）",
+    yaxis=dict(range=[y_min * 0.92, y_range_top], gridcolor="#e9ecef"),
     plot_bgcolor="white",
     paper_bgcolor="white",
     font=dict(size=13),
@@ -824,14 +842,14 @@ fig_bar.update_layout(
     annotations=[
         dict(
             x=f"{best_age}歳",
-            y=best_y,
-            yshift=52,          # バー頂点からさらに上にずらす
+            y=best_y_m,
+            yshift=52,
             text="🏆 最適",
             showarrow=True,
             arrowhead=2,
             arrowcolor="#1a3a5c",
             arrowsize=1.2,
-            ax=0, ay=-36,       # 矢印方向（下向き）
+            ax=0, ay=-36,
             font=dict(size=13, color="#1a3a5c", family="Arial Black"),
             bgcolor="#ffe066",
             borderpad=4,
@@ -913,14 +931,16 @@ for r in all_results:
     r65_net = next(x["lifetime_net"] for x in all_results if x["start_age"] == 65)
     diff = r["lifetime_net"] - r65_net
 
+    monthly_net = get_monthly_pension(r)
+    monthly_net_vs65 = monthly_net - monthly_65
     table_rows.append({
         "受給開始": f"{sa}歳",
         "増減率": adj_str,
-        "月額年金(受給後平均)": f"{avg_monthly_pension:,.0f}円",
+        "月々の年金手取り": f"{monthly_net/10000:.1f}万円",
+        "65歳比（月額）": (f"+{monthly_net_vs65/10000:.1f}万" if monthly_net_vs65 > 0 else f"{monthly_net_vs65/10000:.1f}万"),
         "在職老齢年金カット累計": f"{total_cut/10000:.0f}万円" if total_cut > 0 else "−",
         "加給年金受取累計": f"{total_kakyuu/10000:.0f}万円" if total_kakyuu > 0 else "−",
-        "生涯総手取り": f"{r['lifetime_net']/10000:.0f}万円",
-        "65歳比": (f"+{diff/10000:.0f}万" if diff > 0 else f"{diff/10000:.0f}万"),
+        "65歳比（総額）": (f"+{diff/10000:.0f}万" if diff > 0 else f"{diff/10000:.0f}万"),
         "最適": "🏆" if sa == best_age else "",
     })
 
