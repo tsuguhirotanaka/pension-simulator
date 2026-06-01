@@ -1019,17 +1019,26 @@ COLS = ["年齢", "受給中", "基礎年金(月)", "厚生年金(月)",
 
 def show_result_tab(result: dict, reference_pension=None):
     """結果1件分のメトリクス＋テーブルを描画する共通関数"""
-    col_a, col_b, col_c = st.columns(3)
-    # 年金の総受取額（給与を除く・額面ベース）
     total_pension = (result["df"]["monthly_pension_gross"] * 12).sum()
+    # 年金のみの手取り（給与を除いた純粋な年金手取り）
+    df_r = result["df"]
+    pension_net = (df_r["monthly_pension_gross"] * 12 * (1 - df_r.apply(
+        lambda row: net_rate(row["annual_gross"]), axis=1))).sum()
+
+    col_a, col_b, col_c, col_d = st.columns(4)
     col_a.metric(
         "年金の総受取額（額面）",
         f"{total_pension/10000:.0f}万円",
         delta=(f"{(total_pension - reference_pension)/10000:+.0f}万円（最適比）" if reference_pension is not None and total_pension != reference_pension else None),
         delta_color="inverse",
     )
-    col_b.metric("加給年金 受取累計", f"{result['lifetime_kakyuu']/10000:.0f}万円")
-    col_c.metric("在職老齢年金カット累計", f"{result['total_zairou_cut']/10000:.0f}万円")
+    col_b.metric(
+        "年金の総手取り（概算）",
+        f"{pension_net/10000:.0f}万円",
+        help="税・社会保険料控除後の年金受取累計（給与との合算で計算）",
+    )
+    col_c.metric("加給年金 受取累計", f"{result['lifetime_kakyuu']/10000:.0f}万円")
+    col_d.metric("在職老齢年金カット累計", f"{result['total_zairou_cut']/10000:.0f}万円")
     st.dataframe(build_display_df(result), use_container_width=True, hide_index=True)
 
 
